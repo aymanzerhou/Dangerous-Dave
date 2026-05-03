@@ -56,6 +56,40 @@ typedef struct {
     TileType type;
     bool collected;
 } Collectible;
+typedef struct {
+    TileType tiles[LEVEL_HEIGHT][LEVEL_WIDTH];
+    int enemyCount;
+    Enemy enemies[10];
+    int collectibleCount;
+    Collectible collectibles[20];
+    int doorX, doorY;
+} Level;
+
+typedef struct {
+    SDL_Window* window;
+    SDL_Renderer* renderer;
+    Player player;
+    Level level;
+    bool running;
+    bool paused;
+    int currentLevel;
+    Uint32 lastTime;
+} Game;
+
+void initGame(Game* game);
+void cleanupGame(Game* game);
+void loadLevel(Game* game, int levelNum);
+void processInput(Game* game);
+void updateGame(Game* game);
+void renderGame(Game* game);
+void movePlayer(Player* player, Level* level);
+bool checkCollision(float x, float y, int w, int h, Level* level);
+void updateEnemies(Level* level, Player* player);
+void checkCollectibles(Level* level, Player* player);
+void resetLevel(Game* game);
+
+#endif
+
 
 
 
