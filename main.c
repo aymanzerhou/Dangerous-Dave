@@ -167,6 +167,13 @@ void loadLevel(Game* game, int levelNum) {
         }
     }
 }
+
+void cleanupGame(Game* game) {
+    SDL_DestroyRenderer(game->renderer);
+    SDL_DestroyWindow(game->window);
+    SDL_Quit();
+}
+
 void processInput(Game* game) {
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
@@ -183,6 +190,7 @@ void processInput(Game* game) {
         }
     }
 }
+
 void movePlayer(Player* player, Level* level) {
     const Uint8* keys = SDL_GetKeyboardState(NULL);
 
@@ -218,3 +226,201 @@ void movePlayer(Player* player, Level* level) {
     }
 }
 
+bool checkCollision(float x, float y, int w, int h, Level* level) {
+    int left = (int)(x / TILE_SIZE);
+    int right = (int)((x + w - 1) / TILE_SIZE);
+    int top = (int)(y / TILE_SIZE);
+    int bottom = (int)((y + h - 1) / TILE_SIZE);
+
+    if (left < 0 || right >= LEVEL_WIDTH || top < 0 || bottom >= LEVEL_HEIGHT) {
+        return true;
+    }
+
+    for (int ty = top; ty <= bottom; ty++) {
+        for (int tx = left; tx <= right; tx++) {
+            TileType tile = level->tiles[ty][tx];
+            if (tile == TILE_WALL || tile == TILE_PLATFORM) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+void updateEnemies(Level* level, Player* player) {
+    for (int i = 0; i < level->enemyCount; i++) {
+        Enemy* e = &level->enemies[i];
+        if (!e->alive) continue;
+
+        if (e->type == ENEMY_PATROL) {
+            e->x += e->vx * e->dir;
+            if (e->x <= e->startX || e->x >= e->endX) {
+                e->dir *= -1;
+            }
+        }
+
+        float px = player->x + player->width / 2;
+        float py = player->y + player->height / 2;
+        float ex = e->x + e->width / 2;
+        float ey = e->y + e->height / 2;
+
+        float dx = px - ex;
+        float dy = py - ey;
+        float dist = sqrt(dx * dx + dy * dy);
+
+        if (dist < 10) {
+            player->alive = false;
+        }
+    }
+}
+
+void checkCollectibles(Level* level, Player* player) {
+    float px = player->x + player->width / 2;
+    float py = player->y + player->height / 2;
+
+    for (int i = 0; i < level->collectibleCount; i++) {
+        Collectible* c = &level->collectibles[i];
+        if (c->collected) continue;
+
+        float cx = c->x * TILE_SIZE + TILE_SIZE / 2;
+        float cy = c->y * TILE_SIZE + TILE_SIZE / 2;
+        float dx = px - cx;
+        float dy = py - cy;
+        float dist = sqrt(dx * dx + dy * dy);
+
+        if (dist < 12) {
+            c->collected = true;
+            level->tiles[c->y][c->x] = TILE_EMPTY;
+
+            if (c->type == TILE_TROPHY) {
+                player->hasTrophy = true;
+                player->score += 1000;
+            } else if (c->type == TILE_GEM) {
+                player->score += 100;
+            }
+        }
+    }
+
+    int doorX = level->doorX * TILE_SIZE + TILE_SIZE / 2;
+    int doorY = level->doorY * TILE_SIZE + TILE_SIZE / 2;
+    float ddx = px - doorX;
+    float ddy = py - doorY;
+    float doorDist = sqrt(ddx * ddx + ddy * ddy);
+
+    if (doorDist < 12 && player->hasTrophy) {
+    }
+}
+
+void checkLevelComplete(Game* game) {
+    Level* level = &game->level;
+    Player* player = &game->player;
+
+    float px = player->x + player->width / 2;
+    float py = player->y + player->height / 2;
+    int doorX = level->doorX * TILE_SIZE + TILE_SIZE / 2;
+    int doorY = level->doorY * TILE_SIZE + TILE_SIZE / 2;
+    float ddx = px - doorX;
+    float ddy = py - doorY;
+    float doorDist = sqrt(ddx * ddx + ddy * ddy);
+
+    if (doorDist < 12 && player->hasTrophy) {
+        loadLevel(game, game->currentLevel + 1);
+    }
+}
+
+void resetLevel(Game* game) {
+    game->player.lives--;
+    if (game->player.lives <= 0) {
+        game->player.score = 0;
+        game->player.lives = 3;
+        game->currentLevel = 0;
+    }
+    loadLevel(game, game->currentLevel);
+}
+
+void updateGame(Game* game) {
+    if (game->paused) return;
+
+    if (!game->player.alive) {
+        resetLevel(game);
+        return;
+    }
+
+    movePlayer(&game->player, &game->level);
+    updateEnemies(&game->level, &game->player);
+    checkCollectibles(&game->level, &game->player);
+    checkLevelComplete(game);
+}
+
+void renderGame(Game* game) {
+    SDL_SetRenderDrawColor(game->renderer, 0, 0, 0, 255);
+    SDL_RenderClear(game->renderer);
+
+    Level* level = &game->level;
+
+    for (int y = 0; y < LEVEL_HEIGHT; y++) {
+        for (int x = 0; x < LEVEL_WIDTH; x++) {
+            TileType tile = level->tiles[y][x];
+            if (tile != TILE_EMPTY) {
+                SDL_Rect rect = {x * TILE_SIZE, y * TILE_SIZE, TILE_SIZE, TILE_SIZE};
+                SDL_Color c = getTileColor(tile);
+                SDL_SetRenderDrawColor(game->renderer, c.r, c.g, c.b, c.a);
+                SDL_RenderFillRect(game->renderer, &rect);
+
+                if (tile == TILE_WALL || tile == TILE_PLATFORM) {
+                    SDL_SetRenderDrawColor(game->renderer, 0, 0, 0, 255);
+                    SDL_RenderDrawRect(game->renderer, &rect);
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < level->enemyCount; i++) {
+        Enemy* e = &level->enemies[i];
+        if (e->alive) {
+            SDL_Rect rect = {(int)e->x, (int)e->y, e->width, e->height};
+            SDL_SetRenderDrawColor(game->renderer, 255, 0, 0, 255);
+            SDL_RenderFillRect(game->renderer, &rect);
+            SDL_SetRenderDrawColor(game->renderer, 128, 0, 0, 255);
+            SDL_RenderDrawRect(game->renderer, &rect);
+        }
+    }
+
+    Player* p = &game->player;
+    SDL_Rect playerRect = {(int)p->x, (int)p->y, p->width, p->height};
+    SDL_SetRenderDrawColor(game->renderer, 255, 255, 0, 255);
+    SDL_RenderFillRect(game->renderer, &playerRect);
+    SDL_SetRenderDrawColor(game->renderer, 200, 200, 0, 255);
+    SDL_RenderDrawRect(game->renderer, &playerRect);
+
+    static char hud[128];
+    snprintf(hud, sizeof(hud), "Score: %d  Lives: %d  Level: %d %s",
+        p->score, p->lives, game->currentLevel + 1,
+        p->hasTrophy ? "[TROPHY]" : "");
+
+    SDL_SetRenderDrawColor(game->renderer, 255, 255, 255, 255);
+
+    if (game->paused) {
+        SDL_SetRenderDrawColor(game->renderer, 128, 128, 128, 200);
+        SDL_Rect overlay = {0, 0, SCREEN_WIDTH, SCREEN_HEIGHT};
+        SDL_RenderFillRect(game->renderer, &overlay);
+    }
+
+    SDL_RenderPresent(game->renderer);
+}
+
+int main(int argc, char* argv[]) {
+    Game game;
+    initGame(&game);
+
+    while (game.running) {
+        processInput(&game);
+        updateGame(&game);
+        renderGame(&game);
+
+        SDL_Delay(16);
+    }
+
+    cleanupGame(&game);
+    return 0;
+}
