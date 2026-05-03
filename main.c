@@ -183,4 +183,38 @@ void processInput(Game* game) {
         }
     }
 }
+void movePlayer(Player* player, Level* level) {
+    const Uint8* keys = SDL_GetKeyboardState(NULL);
+
+    player->vx = 0;
+    if (keys[SDL_SCANCODE_LEFT]) player->vx = -PLAYER_SPEED;
+    if (keys[SDL_SCANCODE_RIGHT]) player->vx = PLAYER_SPEED;
+    if (keys[SDL_SCANCODE_UP] && player->onGround) {
+        player->vy = -JUMP_FORCE;
+        player->onGround = false;
+    }
+
+    player->vy += GRAVITY;
+
+    float newX = player->x + player->vx;
+    if (!checkCollision(newX, player->y, player->width, player->height, level)) {
+        player->x = newX;
+    }
+
+    float newY = player->y + player->vy;
+    player->onGround = false;
+
+    if (!checkCollision(player->x, newY, player->width, player->height, level)) {
+        player->y = newY;
+    } else {
+        if (player->vy > 0) {
+            player->onGround = true;
+        }
+        player->vy = 0;
+    }
+
+    if (player->y > SCREEN_HEIGHT) {
+        player->alive = false;
+    }
+}
 
