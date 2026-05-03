@@ -167,4 +167,20 @@ void loadLevel(Game* game, int levelNum) {
         }
     }
 }
+void processInput(Game* game) {
+    SDL_Event event;
+    while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+            game->running = false;
+        }
+        if (event.type == SDL_KEYDOWN) {
+            if (event.key.keysym.sym == SDLK_r) {
+                resetLevel(game);
+            }
+            if (event.key.keysym.sym == SDLK_p) {
+                game->paused = !game->paused;
+            }
+        }
+    }
+}
 
