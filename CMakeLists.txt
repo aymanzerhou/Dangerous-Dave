@@ -12,5 +12,12 @@ target_link_libraries(dave SDL2::SDL2)
 if (WIN32)
     target_link_libraries(dave SDL2::SDL2main)
 endif()
+# Copy SDL2 DLL on Windows
+if (WIN32)
+    add_custom_command(TARGET dave POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:SDL2::SDL2>"
+        "$<TARGET_FILE_DIR:dave>")
+endif()
 
 
